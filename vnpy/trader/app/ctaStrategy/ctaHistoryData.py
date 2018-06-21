@@ -202,9 +202,10 @@ def loadTbPlusCsv(fileName, dbName, symbol):
             tick.lastPrice = float(d[7])
 
             # 由于TB采取的是增量成交信息，故需要做累加才能使其和实盘对应
-            if (lastTime < "16:00:00" and tick.time > "20:55:00") or    # 如果完成了早盘到晚盘的转换，即volume清0
-                (lastDate < d[0] and tick.time > "20:55:00") or         # 或者，若读入的相邻两个tick,日期不同，且后一个tick时间在20:55后，volume清0
-                (lastDate < d[0] and lastTime < "16:00:00"):            # 再或者，日期不同的tick，且前一个tick时间在16:00前，volume清0。
+            if ((lastTime < "16:00:00" and tick.time > "20:55:00") or    
+                (lastDate < d[0] and tick.time > "20:55:00") or         
+                (lastDate < d[0] and lastTime < "16:00:00")):            # 如果完成了早盘到晚盘的转换，即volume清0；或者，若读入的相邻两个tick,日期不同，
+                                                                        # 且后一个tick时间在20:55后，volume清0；再或者，日期不同的tick，且前一个tick时间在16:00前，volume清0。
                 volume = 0
             lastDate = d[0]
             lastTime = tick.time                                        # 更新lastDate, lastTime
