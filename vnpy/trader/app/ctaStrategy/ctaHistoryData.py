@@ -18,7 +18,7 @@ import pymongo
 
 from vnpy.trader.vtGlobal import globalSetting
 from vnpy.trader.vtConstant import *
-from vnpy.trader.vtObject import VtBarData
+from vnpy.trader.vtObject import VtBarData, VtTickData
 from .ctaBase import SETTING_DB_NAME, TICK_DB_NAME, MINUTE_DB_NAME, DAILY_DB_NAME
 
 
@@ -190,9 +190,9 @@ def loadTbPlusCsv(fileName, dbName, symbol):
             tick.symbol = symbol
 
             tick.date = d[0]
-            timeStr = "0.0" if d[1] == "0" else d[1]  
+            timeStr = "0.0" if d[1] == "0" else d[1]  # 由于00:00:00的tick在TBPlus中，其time项为0。没有小数点，会导致后续解析失败
             tick.datetime = datetime.strptime(d[0] + " " + timeStr + "0" * (14-len(timeStr)),"%Y%m%d 0.%H%M%S%f") #用0在后面补全
-            tick.time = tick.datetime.strftime("%H:%M:%S.%f")[:10]
+            tick.time = tick.datetime.strftime("%H:%M:%S.%f")[:10] # 与vnTrader里面的timeStr保持一致
 
             tick.lastVolume = int(d[3])
             tick.bidVolume1 = int(d[5])
@@ -201,19 +201,21 @@ def loadTbPlusCsv(fileName, dbName, symbol):
             tick.bidPrice1 = float(d[9])
             tick.lastPrice = float(d[7])
 
-            if (lastTime < "16:00:00" and tick.time > "20:55:00") or (lastDate < d[0] and tick.time > "20:55:00") or (lastDate < d[0] and lastTime < "16:00:00"):
+            # 由于TB采取的是增量成交信息，故需要做累加才能使其和实盘对应
+            if (lastTime < "16:00:00" and tick.time > "20:55:00") or    # 如果完成了早盘到晚盘的转换，即volume清0
+                (lastDate < d[0] and tick.time > "20:55:00") or         # 或者，若读入的相邻两个tick,日期不同，且后一个tick时间在20:55后，volume清0
+                (lastDate < d[0] and lastTime < "16:00:00"):            # 再或者，日期不同的tick，且前一个tick时间在16:00前，volume清0。
                 volume = 0
             lastDate = d[0]
-            lastTime = tick.time
-            tick.lastVolume = volume
-            volume += int(d[3])
-            tick.volume = volume
+            lastTime = tick.time                                        # 更新lastDate, lastTime
+            volume += int(d[3])                                         # 记录当交易日（从21点开始）的总成交量
+            tick.volume = volume                                           
 
             tick.openInterest = int(d[10])
             flt = {'datetime': tick.datetime}
             collection.update_one(flt, {'$set':tick.__dict__}, upsert=True)  
             count += 1
-            if count%10000==0:
+            if count % 10000 == 0:                                      # 降低了打印频率
                 print tick.date, tick.time    
 
         print u'插入完毕，耗时：%s' % (time()-start)
